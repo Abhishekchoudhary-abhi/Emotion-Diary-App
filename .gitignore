@@ -1,0 +1,43 @@
+# ------------------------
+# Python
+# ------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.log
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Pytest / Coverage
+.coverage
+htmlcov/
+.cache/
+
+# ------------------------
+# VS Code
+# ------------------------
+.vscode/
+.history/
+
+# ------------------------
+# OS Files
+# ------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------
+# Project Specific
+# ------------------------
+data/diary.csv        # your diary log file
+data/images/          # user-uploaded images
+data/audio/           # user audio files
+models/               # saved models

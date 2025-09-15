@@ -1,0 +1,10 @@
+deepface
+opencv-python
+transformers
+torch
+streamlit
+Pillow
+pandas
+librosa
+sounddevice
+scipy
