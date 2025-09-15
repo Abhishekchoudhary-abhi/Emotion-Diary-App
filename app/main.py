@@ -28,6 +28,7 @@ from src.audio_emotion import predict_emotion as predict_voice_emotion
 # -----------------------------
 def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
     csv_path = os.path.join(project_root, "data", "diary.csv")
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     file_exists = os.path.isfile(csv_path)
     with open(csv_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -65,16 +66,21 @@ ctx = webrtc_streamer(
     key="snapshot",
     video_transformer_factory=VideoTransformer,
     rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]  # ✅ STUN FIX
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["turn:openrelay.metered.ca:80"],
+             "username": "openrelayproject",
+             "credential": "openrelayproject"}
+        ]
     },
     media_stream_constraints={"video": True, "audio": False},
 )
 
 if ctx.video_transformer:
+    snapshot = ctx.video_transformer.frame
     if st.button("📷 Take Snapshot"):
-        if ctx.video_transformer.frame is not None:
-            snapshot = ctx.video_transformer.frame.copy()
-            st.session_state["snapshot"] = snapshot
+        if snapshot is not None:
+            st.session_state["snapshot"] = snapshot.copy()
             st.image(
                 cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB),
                 caption="Your Snapshot",
@@ -109,6 +115,7 @@ if st.button("🔍 Analyze My Mood"):
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
                 temp_image_path = os.path.join(project_root, "data", "images", "temp.jpg")
+                os.makedirs(os.path.dirname(temp_image_path), exist_ok=True)
                 Image.fromarray(img_rgb).save(temp_image_path)
                 face_result = analyze_face(temp_image_path)
 
@@ -117,6 +124,7 @@ if st.button("🔍 Analyze My Mood"):
 
                 # --- Audio analysis ---
                 temp_audio_path = os.path.join(project_root, "data", "audio", "temp.wav")
+                os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
                 with open(temp_audio_path, "wb") as f:
                     f.write(uploaded_audio.getbuffer())
                 voice_result = predict_voice_emotion(temp_audio_path)
