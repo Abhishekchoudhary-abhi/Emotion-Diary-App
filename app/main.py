@@ -82,3 +82,25 @@ if st.button("Analyze My Mood"):
             voice_result = predict_voice_emotion(temp_audio_path)
 
         st.success("Analysis Complete!")
+        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_entry(current_date, diary_entry, face_result, text_result, voice_result)
+        st.success("Your entry has been saved!")
+        
+        st.subheader("Here's your multi-modal analysis:")
+        res_col1, res_col2, res_col3 = st.columns(3)
+        with res_col1:
+            st.markdown("### Facial Expression")
+            st.image(image, caption="Your Snapshot", use_container_width=True)
+            st.write(f"**Detected:** {face_result.capitalize()}")
+        with res_col2:
+            st.markdown("### Diary Sentiment")
+            st.info(f'"{diary_entry}"')
+            st.write(f"**Detected:** {text_result.capitalize()}")
+        with res_col3:
+            st.markdown("### Voice Tone")
+            st.audio(temp_audio_path)
+            st.write(f"**Detected:** {voice_result.capitalize()}")
+    else:
+        st.warning("Please provide a diary entry, take a snapshot, and upload an audio file.")
+
+# (Diary History section remains the same)
