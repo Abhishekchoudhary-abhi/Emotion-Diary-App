@@ -63,7 +63,10 @@ class SnapshotTransformer(VideoTransformerBase):
         # Capture only if not already captured
         if not self.captured:
             self.frame = frame.to_ndarray(format="bgr24")
-        return frame.to_ndarray(format="bgr24")  # show live preview
+        # Stop video feed after capture by returning black frame
+        if self.captured:
+            return np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
+        return frame.to_ndarray(format="bgr24")
 
 ctx = webrtc_streamer(
     key="snapshot",
@@ -81,15 +84,15 @@ ctx = webrtc_streamer(
 
 if ctx.video_transformer and ctx.video_transformer.frame is not None:
     if st.button("📷 Take Snapshot"):
-        # Mark as captured so video stops updating
         ctx.video_transformer.captured = True
-
         img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img_rgb)
 
+        # Save to session state as bytes
         buffer = BytesIO()
         pil_img.save(buffer, format="PNG")
         st.session_state["snapshot_bytes"] = buffer.getvalue()
+
         st.image(pil_img, caption="Your Snapshot", use_container_width=True)
         st.success("✅ Snapshot captured!")
 
