@@ -50,18 +50,21 @@ if webrtc_ctx.video_receiver:
         frame = webrtc_ctx.video_receiver.get_latest_frame()
         if frame is not None:
             try:
-                # Convert to PIL.Image directly from av.VideoFrame
+                # Convert to PIL.Image
                 img = frame.to_image()
-                st.session_state["snapshot"] = img
+                st.session_state["snapshot"] = img   # ✅ only save image
                 st.success("Snapshot taken!")
             except Exception as e:
                 st.warning(f"Could not convert frame to image. Error: {e}")
         else:
             st.warning("No frame received. Please try again.")
 
-# Show snapshot if available
-if "snapshot" in st.session_state and st.session_state["snapshot"] is not None:
+# Show snapshot safely
+if isinstance(st.session_state.get("snapshot"), Image.Image):
     st.image(st.session_state["snapshot"], caption="Your Snapshot")
+elif "snapshot" in st.session_state:
+    st.warning("Snapshot exists but is not a valid image. Please retake.")
+
 
 # --- AUDIO UPLOAD ---
 st.header("Upload your audio")
@@ -69,7 +72,7 @@ uploaded_audio = st.file_uploader("Choose an audio file...", type=["wav", "mp3"]
 
 # --- ANALYSIS ---
 if st.button("Analyze My Mood"):
-    if diary_entry and "snapshot" in st.session_state and st.session_state["snapshot"] is not None and uploaded_audio is not None:
+    if diary_entry and isinstance(st.session_state.get("snapshot"), Image.Image) and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             # Save snapshot temporarily
             image = st.session_state["snapshot"].convert('RGB')
@@ -112,4 +115,4 @@ if st.button("Analyze My Mood"):
     else:
         st.warning("Please provide a diary entry, take a snapshot, and upload an audio file.")
 
-# (Diary History section can be added here later)
+# (Diary History section can be added later)
