@@ -15,13 +15,13 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-# Import all our analysis functions
+# Import analysis functions
 from src.face_emotion import analyze_face
 from src.text_sentiment import analyze_sentiment
 from src.audio_emotion import predict_emotion as predict_voice_emotion
 
+
 def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
-    # (Saving function remains the same)
     csv_path = os.path.join(project_root, "data", "diary.csv")
     file_exists = os.path.isfile(csv_path)
     with open(csv_path, 'a', newline='', encoding='utf-8') as f:
@@ -30,9 +30,9 @@ def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
             writer.writerow(['Date', 'Text', 'Facial Emotion', 'Text Sentiment', 'Voice Emotion'])
         writer.writerow([date, text, face_emotion, text_sentiment, voice_emotion])
 
+
 # --- App Layout ---
 st.title("Multi-Modal Emotion Diary")
-# (Dashboard code can remain here)
 st.markdown("---")
 
 st.header("How are you feeling today?")
@@ -47,45 +47,54 @@ webrtc_ctx = webrtc_streamer(
 
 if webrtc_ctx.video_receiver:
     if st.button("Take Snapshot"):
-        try:
-            video_frame = webrtc_ctx.video_receiver.get_latest_frame()
-            
-            # --- THIS IS THE FIX ---
-            # Convert the raw video frame (ndarray) to a PIL Image
-            img = video_frame.to_image()
-            
-            st.session_state["snapshot"] = img
-            st.success("Snapshot taken!")
-        except Exception as e:
-            st.warning(f"No frame received. Please try again. Error: {e}")
+        frame = webrtc_ctx.video_receiver.get_latest_frame()
+        if frame is not None:
+            try:
+                # Convert to PIL.Image directly from av.VideoFrame
+                img = frame.to_image()
+                st.session_state["snapshot"] = img
+                st.success("Snapshot taken!")
+            except Exception as e:
+                st.warning(f"Could not convert frame to image. Error: {e}")
+        else:
+            st.warning("No frame received. Please try again.")
 
+# Show snapshot if available
 if "snapshot" in st.session_state and st.session_state["snapshot"] is not None:
     st.image(st.session_state["snapshot"], caption="Your Snapshot")
 
-
+# --- AUDIO UPLOAD ---
 st.header("Upload your audio")
 uploaded_audio = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
 
+# --- ANALYSIS ---
 if st.button("Analyze My Mood"):
-    # (Analysis button logic remains the same)
     if diary_entry and "snapshot" in st.session_state and st.session_state["snapshot"] is not None and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
+            # Save snapshot temporarily
             image = st.session_state["snapshot"].convert('RGB')
             temp_image_path = os.path.join(project_root, "data", "images", "temp_image.jpg")
+            os.makedirs(os.path.dirname(temp_image_path), exist_ok=True)
             image.save(temp_image_path)
             face_result = analyze_face(temp_image_path)
 
+            # Analyze text
             text_result = analyze_sentiment(diary_entry)
+
+            # Save audio temporarily
             temp_audio_path = os.path.join(project_root, "data", "audio", "temp_recording.wav")
+            os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
             with open(temp_audio_path, "wb") as f:
                 f.write(uploaded_audio.getbuffer())
             voice_result = predict_voice_emotion(temp_audio_path)
 
+        # Save entry
         st.success("Analysis Complete!")
         current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_entry(current_date, diary_entry, face_result, text_result, voice_result)
         st.success("Your entry has been saved!")
-        
+
+        # Show results
         st.subheader("Here's your multi-modal analysis:")
         res_col1, res_col2, res_col3 = st.columns(3)
         with res_col1:
@@ -103,4 +112,4 @@ if st.button("Analyze My Mood"):
     else:
         st.warning("Please provide a diary entry, take a snapshot, and upload an audio file.")
 
-# (Diary History section remains the same)
+# (Diary History section can be added here later)
