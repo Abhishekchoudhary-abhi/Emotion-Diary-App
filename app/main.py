@@ -6,6 +6,7 @@ import csv
 from datetime import datetime
 from PIL import Image
 import cv2
+import numpy as np
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
 # -----------------------------
@@ -94,45 +95,51 @@ if st.button("🔍 Analyze My Mood"):
     if (
         diary_entry
         and "snapshot" in st.session_state
-        and st.session_state["snapshot"] is not None
+        and isinstance(st.session_state["snapshot"], np.ndarray)
         and uploaded_audio is not None
     ):
         with st.spinner("Analyzing..."):
-            # --- Face analysis ---
-            img_rgb = cv2.cvtColor(st.session_state["snapshot"], cv2.COLOR_BGR2RGB)
-            temp_image_path = os.path.join(project_root, "data", "images", "temp.jpg")
-            Image.fromarray(img_rgb).save(temp_image_path)
-            face_result = analyze_face(temp_image_path)
+            try:
+                # --- Face analysis ---
+                img_bgr = st.session_state["snapshot"]
+                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-            # --- Text analysis ---
-            text_result = analyze_sentiment(diary_entry)
+                temp_image_path = os.path.join(project_root, "data", "images", "temp.jpg")
+                Image.fromarray(img_rgb).save(temp_image_path)
+                face_result = analyze_face(temp_image_path)
 
-            # --- Audio analysis ---
-            temp_audio_path = os.path.join(project_root, "data", "audio", "temp.wav")
-            with open(temp_audio_path, "wb") as f:
-                f.write(uploaded_audio.getbuffer())
-            voice_result = predict_voice_emotion(temp_audio_path)
+                # --- Text analysis ---
+                text_result = analyze_sentiment(diary_entry)
 
-        # Save diary entry
-        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_entry(current_date, diary_entry, face_result, text_result, voice_result)
+                # --- Audio analysis ---
+                temp_audio_path = os.path.join(project_root, "data", "audio", "temp.wav")
+                with open(temp_audio_path, "wb") as f:
+                    f.write(uploaded_audio.getbuffer())
+                voice_result = predict_voice_emotion(temp_audio_path)
 
-        st.success("✅ Analysis Complete & Entry Saved!")
+                # Save diary entry
+                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                save_entry(current_date, diary_entry, face_result, text_result, voice_result)
 
-        # Results display
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("### Facial Expression")
-            st.image(img_rgb, caption="Your Snapshot", use_container_width=True)
-            st.write(f"**Detected:** {face_result.capitalize()}")
-        with col2:
-            st.markdown("### Diary Sentiment")
-            st.info(f'"{diary_entry}"')
-            st.write(f"**Detected:** {text_result.capitalize()}")
-        with col3:
-            st.markdown("### Voice Tone")
-            st.audio(temp_audio_path)
-            st.write(f"**Detected:** {voice_result.capitalize()}")
+                st.success("✅ Analysis Complete & Entry Saved!")
+
+                # Results display
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown("### Facial Expression")
+                    st.image(img_rgb, caption="Your Snapshot", use_container_width=True)
+                    st.write(f"**Detected:** {face_result.capitalize()}")
+                with col2:
+                    st.markdown("### Diary Sentiment")
+                    st.info(f'"{diary_entry}"')
+                    st.write(f"**Detected:** {text_result.capitalize()}")
+                with col3:
+                    st.markdown("### Voice Tone")
+                    st.audio(temp_audio_path)
+                    st.write(f"**Detected:** {voice_result.capitalize()}")
+
+            except Exception as e:
+                st.error(f"Error during analysis: {e}")
 
     else:
         st.warning("⚠️ Please provide text, take a snapshot, and upload audio before analysis.")
