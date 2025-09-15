@@ -81,4 +81,4 @@ if st.button("Analyze My Mood"):
                 f.write(uploaded_audio.getbuffer())
             voice_result = predict_voice_emotion(temp_audio_path)
 
-        st.success("Analysis Complete
+        st.success("Analysis Complete!")
