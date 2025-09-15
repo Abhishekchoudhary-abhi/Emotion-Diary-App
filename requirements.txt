@@ -11,3 +11,4 @@ scipy
 tf-keras
 streamlit-webrtc
 av
+numpy
