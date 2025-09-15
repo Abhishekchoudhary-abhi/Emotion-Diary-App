@@ -37,7 +37,6 @@ def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
             )
         writer.writerow([date, text, face_emotion, text_sentiment, voice_emotion])
 
-
 # -----------------------------
 # STREAMLIT APP UI
 # -----------------------------
@@ -62,7 +61,6 @@ class VideoTransformer(VideoTransformerBase):
         self.frame = img
         return img
 
-
 ctx = webrtc_streamer(
     key="snapshot",
     video_transformer_factory=VideoTransformer,
@@ -73,12 +71,18 @@ ctx = webrtc_streamer(
 )
 
 if ctx.video_transformer:
-    if st.button("Take Snapshot"):
-        snapshot = ctx.video_transformer.frame
-        if snapshot is not None:
+    if st.button("📷 Take Snapshot"):
+        if ctx.video_transformer.frame is not None:
+            snapshot = ctx.video_transformer.frame.copy()
             st.session_state["snapshot"] = snapshot
-            st.image(cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB), caption="Your Snapshot")
-            st.success("Snapshot taken!")
+            st.image(
+                cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB),
+                caption="Your Snapshot",
+                use_container_width=True,
+            )
+            st.success("✅ Snapshot captured!")
+        else:
+            st.warning("⚠️ Camera not ready yet. Please wait...")
 
 # -----------------------------
 # AUDIO UPLOAD
