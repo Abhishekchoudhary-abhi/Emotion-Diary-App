@@ -50,22 +50,24 @@ st.header("How are you feeling today?")
 diary_entry = st.text_area("Write down your thoughts and feelings...", height=150)
 
 # -----------------------------
-# VIDEO SNAPSHOT
+# VIDEO SNAPSHOT (Single Frame)
 # -----------------------------
 st.header("📸 Capture your expression")
 
-class VideoTransformer(VideoTransformerBase):
+class SnapshotTransformer(VideoTransformerBase):
     def __init__(self):
+        self.captured = False
         self.frame = None
 
     def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        self.frame = img
-        return img
+        # Capture only if not already captured
+        if not self.captured:
+            self.frame = frame.to_ndarray(format="bgr24")
+        return frame.to_ndarray(format="bgr24")  # show live preview
 
 ctx = webrtc_streamer(
     key="snapshot",
-    video_transformer_factory=VideoTransformer,
+    video_transformer_factory=SnapshotTransformer,
     rtc_configuration={
         "iceServers": [
             {"urls": ["stun:stun.l.google.com:19302"]},
@@ -77,21 +79,19 @@ ctx = webrtc_streamer(
     media_stream_constraints={"video": True, "audio": False},
 )
 
-# Take snapshot and store safely as bytes
-if ctx.video_transformer:
-    snapshot = ctx.video_transformer.frame
+if ctx.video_transformer and ctx.video_transformer.frame is not None:
     if st.button("📷 Take Snapshot"):
-        if snapshot is not None:
-            # Convert numpy array to bytes (PNG)
-            img_rgb = cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(img_rgb)
-            buffer = BytesIO()
-            pil_img.save(buffer, format="PNG")
-            st.session_state["snapshot_bytes"] = buffer.getvalue()
-            st.image(pil_img, caption="Your Snapshot", use_container_width=True)
-            st.success("✅ Snapshot captured!")
-        else:
-            st.warning("⚠️ Camera not ready yet. Please wait...")
+        # Mark as captured so video stops updating
+        ctx.video_transformer.captured = True
+
+        img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
+
+        buffer = BytesIO()
+        pil_img.save(buffer, format="PNG")
+        st.session_state["snapshot_bytes"] = buffer.getvalue()
+        st.image(pil_img, caption="Your Snapshot", use_container_width=True)
+        st.success("✅ Snapshot captured!")
 
 # -----------------------------
 # AUDIO UPLOAD
