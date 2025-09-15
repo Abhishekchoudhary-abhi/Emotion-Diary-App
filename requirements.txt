@@ -9,3 +9,4 @@ librosa
 sounddevice
 scipy
 tf-keras
+streamlit-webrtc
