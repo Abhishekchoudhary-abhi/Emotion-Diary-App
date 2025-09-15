@@ -6,7 +6,8 @@ from PIL import Image
 from datetime import datetime
 import csv
 import pandas as pd
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer
+import av # Required for webrtc
 
 # Add project root to Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,18 +18,6 @@ sys.path.append(project_root)
 from src.face_emotion import analyze_face
 from src.text_sentiment import analyze_sentiment
 from src.audio_emotion import predict_emotion as predict_voice_emotion
-
-# --- Session State to hold the snapshot ---
-if 'snapshot' not in st.session_state:
-    st.session_state['snapshot'] = None
-
-# --- Webcam Frame Capturing ---
-class VideoTransformer(VideoTransformerBase):
-    def transform(self, frame):
-        # This function is required by the library, but we don't need to process the live feed.
-        # We'll just return the frame as is.
-        img = frame.to_ndarray(format="bgr24")
-        return img
 
 def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
     # (Saving function remains the same)
@@ -48,30 +37,37 @@ st.markdown("---")
 st.header("How are you feeling today?")
 diary_entry = st.text_area("Write down your thoughts and feelings...", height=150)
 
+# --- NEW WEBCAM SETUP ---
 st.header("Capture your expression")
-# Create the WebRTC streamer
-ctx = webrtc_streamer(key="webcam", video_transformer_class=VideoTransformer)
+webrtc_ctx = webrtc_streamer(
+    key="snapshot",
+    video_frame_callback=lambda frame: frame, # Simple callback to return the frame
+)
 
-if ctx.video_transformer:
+snapshot = None
+if webrtc_ctx.video_receiver:
     if st.button("Take Snapshot"):
-        # Take a snapshot from the video feed
-        snapshot = ctx.video_transformer.get_frame()
-        if snapshot is not None:
-            st.session_state['snapshot'] = Image.fromarray(snapshot)
+        try:
+            video_frame = webrtc_ctx.video_receiver.get_latest_frame()
+            img = video_frame.to_image()
+            st.session_state["snapshot"] = img
             st.success("Snapshot taken!")
-            st.image(st.session_state['snapshot'], caption="Your Snapshot")
-        else:
-            st.warning("Could not take snapshot. Please try again.")
+        except Exception as e:
+            st.warning("No frame received. Please try again.")
+
+if "snapshot" in st.session_state and st.session_state["snapshot"] is not None:
+    st.image(st.session_state["snapshot"], caption="Your Snapshot")
+
 
 st.header("Upload your audio")
 uploaded_audio = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
 
 if st.button("Analyze My Mood"):
     # Check if all inputs are ready
-    if diary_entry and st.session_state['snapshot'] is not None and uploaded_audio is not None:
+    if diary_entry and "snapshot" in st.session_state and st.session_state["snapshot"] is not None and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             # --- Image Processing (using the snapshot) ---
-            image = st.session_state['snapshot'].convert('RGB')
+            image = st.session_state["snapshot"].convert('RGB')
             temp_image_path = os.path.join(project_root, "data", "images", "temp_image.jpg")
             image.save(temp_image_path)
             face_result = analyze_face(temp_image_path)

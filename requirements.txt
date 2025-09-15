@@ -10,3 +10,4 @@ sounddevice
 scipy
 tf-keras
 streamlit-webrtc
+av
