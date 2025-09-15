@@ -54,47 +54,55 @@ diary_entry = st.text_area("Write down your thoughts and feelings...", height=15
 # -----------------------------
 st.header("📸 Capture your expression")
 
-class SnapshotTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.captured = False
-        self.frame = None
+if "camera_started" not in st.session_state:
+    st.session_state["camera_started"] = False
 
-    def transform(self, frame):
-        # Capture only if not already captured
-        if not self.captured:
-            self.frame = frame.to_ndarray(format="bgr24")
-        # Stop video feed after capture by returning black frame
-        if self.captured:
-            return np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
-        return frame.to_ndarray(format="bgr24")
+if st.button("▶️ Start Camera"):
+    st.session_state["camera_started"] = True
 
-ctx = webrtc_streamer(
-    key="snapshot",
-    video_transformer_factory=SnapshotTransformer,
-    rtc_configuration={
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["turn:openrelay.metered.ca:80"],
-             "username": "openrelayproject",
-             "credential": "openrelayproject"}
-        ]
-    },
-    media_stream_constraints={"video": True, "audio": False},
-)
+if st.session_state["camera_started"]:
 
-if ctx.video_transformer and ctx.video_transformer.frame is not None:
-    if st.button("📷 Take Snapshot"):
-        ctx.video_transformer.captured = True
-        img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(img_rgb)
+    class SnapshotTransformer(VideoTransformerBase):
+        def __init__(self):
+            self.captured = False
+            self.frame = None
 
-        # Save to session state as bytes
-        buffer = BytesIO()
-        pil_img.save(buffer, format="PNG")
-        st.session_state["snapshot_bytes"] = buffer.getvalue()
+        def transform(self, frame):
+            # Capture only if not already captured
+            if not self.captured:
+                self.frame = frame.to_ndarray(format="bgr24")
+            # Stop video feed after capture
+            if self.captured:
+                return np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
+            return frame.to_ndarray(format="bgr24")
 
-        st.image(pil_img, caption="Your Snapshot", use_container_width=True)
-        st.success("✅ Snapshot captured!")
+    ctx = webrtc_streamer(
+        key="snapshot",
+        video_transformer_factory=SnapshotTransformer,
+        rtc_configuration={
+            "iceServers": [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["turn:openrelay.metered.ca:80"],
+                 "username": "openrelayproject",
+                 "credential": "openrelayproject"}
+            ]
+        },
+        media_stream_constraints={"video": True, "audio": False},
+    )
+
+    if ctx.video_transformer and ctx.video_transformer.frame is not None:
+        if st.button("📷 Take Snapshot"):
+            ctx.video_transformer.captured = True
+            img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(img_rgb)
+
+            # Save to session state as bytes
+            buffer = BytesIO()
+            pil_img.save(buffer, format="PNG")
+            st.session_state["snapshot_bytes"] = buffer.getvalue()
+
+            st.image(pil_img, caption="Your Snapshot", use_container_width=True)
+            st.success("✅ Snapshot captured!")
 
 # -----------------------------
 # AUDIO UPLOAD
