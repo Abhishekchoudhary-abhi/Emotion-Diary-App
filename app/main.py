@@ -7,6 +7,7 @@ from datetime import datetime
 from PIL import Image
 import cv2
 import numpy as np
+from io import BytesIO
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
 # -----------------------------
@@ -76,16 +77,18 @@ ctx = webrtc_streamer(
     media_stream_constraints={"video": True, "audio": False},
 )
 
+# Take snapshot and store safely as bytes
 if ctx.video_transformer:
     snapshot = ctx.video_transformer.frame
     if st.button("📷 Take Snapshot"):
         if snapshot is not None:
-            st.session_state["snapshot"] = snapshot.copy()
-            st.image(
-                cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB),
-                caption="Your Snapshot",
-                use_container_width=True,
-            )
+            # Convert numpy array to bytes (PNG)
+            img_rgb = cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(img_rgb)
+            buffer = BytesIO()
+            pil_img.save(buffer, format="PNG")
+            st.session_state["snapshot_bytes"] = buffer.getvalue()
+            st.image(pil_img, caption="Your Snapshot", use_container_width=True)
             st.success("✅ Snapshot captured!")
         else:
             st.warning("⚠️ Camera not ready yet. Please wait...")
@@ -102,21 +105,18 @@ if uploaded_audio:
 # ANALYZE & SAVE
 # -----------------------------
 if st.button("🔍 Analyze My Mood"):
-    if (
-        diary_entry
-        and "snapshot" in st.session_state
-        and isinstance(st.session_state["snapshot"], np.ndarray)
-        and uploaded_audio is not None
-    ):
+    snapshot_bytes = st.session_state.get("snapshot_bytes")
+    if diary_entry and snapshot_bytes and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             try:
-                # --- Face analysis ---
-                img_bgr = st.session_state["snapshot"]
-                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                # --- Convert snapshot bytes to numpy array for analysis ---
+                pil_img = Image.open(BytesIO(snapshot_bytes))
+                img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
+                # --- Face analysis ---
                 temp_image_path = os.path.join(project_root, "data", "images", "temp.jpg")
                 os.makedirs(os.path.dirname(temp_image_path), exist_ok=True)
-                Image.fromarray(img_rgb).save(temp_image_path)
+                pil_img.save(temp_image_path)
                 face_result = analyze_face(temp_image_path)
 
                 # --- Text analysis ---
@@ -139,7 +139,7 @@ if st.button("🔍 Analyze My Mood"):
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.markdown("### Facial Expression")
-                    st.image(img_rgb, caption="Your Snapshot", use_container_width=True)
+                    st.image(pil_img, caption="Your Snapshot", use_container_width=True)
                     st.write(f"**Detected:** {face_result.capitalize()}")
                 with col2:
                     st.markdown("### Diary Sentiment")
@@ -152,6 +152,5 @@ if st.button("🔍 Analyze My Mood"):
 
             except Exception as e:
                 st.error(f"Error during analysis: {e}")
-
     else:
         st.warning("⚠️ Please provide text, take a snapshot, and upload audio before analysis.")
