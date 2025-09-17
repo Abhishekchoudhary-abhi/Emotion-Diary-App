@@ -9,6 +9,8 @@ import cv2
 import numpy as np
 from io import BytesIO
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
 
 # -----------------------------
 # PATH FIX
@@ -23,6 +25,13 @@ sys.path.append(project_root)
 from src.face_emotion import analyze_face
 from src.text_sentiment import analyze_sentiment
 from src.audio_emotion import predict_emotion as predict_voice_emotion
+
+# -----------------------------
+# GOOGLE DRIVE AUTH
+# -----------------------------
+gauth = GoogleAuth()
+gauth.LocalWebserverAuth()  # Opens browser to authenticate
+drive = GoogleDrive(gauth)
 
 # -----------------------------
 # SAVE ENTRY TO CSV
@@ -40,7 +49,7 @@ def save_entry(date, text, face_emotion, text_sentiment, voice_emotion):
         writer.writerow([date, text, face_emotion, text_sentiment, voice_emotion])
 
 # -----------------------------
-# STREAMLIT APP UI
+# STREAMLIT UI
 # -----------------------------
 st.title("📔 Multi-Modal Emotion Diary")
 st.markdown("---")
@@ -50,7 +59,7 @@ st.header("How are you feeling today?")
 diary_entry = st.text_area("Write down your thoughts and feelings...", height=150)
 
 # -----------------------------
-# VIDEO SNAPSHOT (One Button Flow)
+# VIDEO SNAPSHOT
 # -----------------------------
 st.header("📸 Capture your expression")
 
@@ -87,12 +96,9 @@ if ctx.video_transformer and ctx.video_transformer.frame is not None:
         ctx.video_transformer.captured = True
         img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img_rgb)
-
-        # Save to session state as bytes
         buffer = BytesIO()
         pil_img.save(buffer, format="PNG")
         st.session_state["snapshot_bytes"] = buffer.getvalue()
-
         st.image(pil_img, caption="Your Snapshot", use_container_width=True)
         st.success("✅ Snapshot captured!")
 
@@ -112,46 +118,42 @@ if st.button("🔍 Analyze My Mood"):
     if diary_entry and snapshot_bytes and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             try:
-                # --- Create unique folder for this entry ---
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                entry_dir = os.path.join(project_root, "data", "entries", timestamp)
-                os.makedirs(entry_dir, exist_ok=True)
-
-                # --- Save snapshot ---
+                
+                # --- Save snapshot locally ---
                 pil_img = Image.open(BytesIO(snapshot_bytes))
-                img_path = os.path.join(entry_dir, "snapshot.png")
+                img_path = os.path.join(project_root, f"snapshot_{timestamp}.png")
                 pil_img.save(img_path)
 
-                # --- Save text ---
-                text_path = os.path.join(entry_dir, "text.txt")
-                with open(text_path, "w", encoding="utf-8") as f:
-                    f.write(diary_entry)
-
-                # --- Save audio ---
-                audio_path = os.path.join(entry_dir, "audio.wav")
+                # --- Save audio locally ---
+                audio_path = os.path.join(project_root, f"audio_{timestamp}.wav")
                 with open(audio_path, "wb") as f:
                     f.write(uploaded_audio.getbuffer())
 
-                # ✅ Debug: confirm save
-                st.write(f"📂 Debug: Saved files to {entry_dir}")
+                # --- Save text locally ---
+                text_path = os.path.join(project_root, f"text_{timestamp}.txt")
+                with open(text_path, "w", encoding="utf-8") as f:
+                    f.write(diary_entry)
 
-                # --- Face analysis ---
+                # --- Upload to Google Drive ---
+                g_files = []
+                for path in [img_path, audio_path, text_path]:
+                    gfile = drive.CreateFile({'title': os.path.basename(path)})
+                    gfile.SetContentFile(path)
+                    gfile.Upload()
+                    g_files.append(gfile['title'])
+
+                st.success(f"✅ Files uploaded to Google Drive: {g_files}")
+
+                # --- ANALYSIS ---
                 face_result = analyze_face(img_path)
-
-                # --- Text analysis ---
                 text_result = analyze_sentiment(diary_entry)
-
-                # --- Audio analysis ---
                 voice_result = predict_voice_emotion(audio_path)
 
-                # --- Save to central CSV (summary only) ---
                 current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_entry(current_date, diary_entry, face_result, text_result, voice_result)
 
-                st.success("✅ Analysis Complete & Entry Saved!")
-                st.success(f"📂 Files saved in: `{entry_dir}`")
-
-                # Results display
+                # --- Display Results ---
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.markdown("### Facial Expression")
@@ -167,6 +169,6 @@ if st.button("🔍 Analyze My Mood"):
                     st.write(f"**Detected:** {voice_result.capitalize()}")
 
             except Exception as e:
-                st.error(f"Error during analysis: {e}")
+                st.error(f"Error: {e}")
     else:
         st.warning("⚠️ Please provide text, take a snapshot, and upload audio before analysis.")
