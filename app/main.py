@@ -50,61 +50,51 @@ st.header("How are you feeling today?")
 diary_entry = st.text_area("Write down your thoughts and feelings...", height=150)
 
 # -----------------------------
-# VIDEO SNAPSHOT (Single Frame)
+# VIDEO SNAPSHOT (One Button Flow)
 # -----------------------------
 st.header("📸 Capture your expression")
 
-if "camera_started" not in st.session_state:
-    st.session_state["camera_started"] = False
+class SnapshotTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.captured = False
+        self.frame = None
 
-if st.button("▶️ Start Camera"):
-    st.session_state["camera_started"] = True
+    def transform(self, frame):
+        if not self.captured:
+            self.frame = frame.to_ndarray(format="bgr24")
+        if self.captured:
+            return np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
+        return frame.to_ndarray(format="bgr24")
 
-if st.session_state["camera_started"]:
+ctx = webrtc_streamer(
+    key="snapshot",
+    video_transformer_factory=SnapshotTransformer,
+    rtc_configuration={
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {
+                "urls": ["turn:openrelay.metered.ca:80"],
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+        ]
+    },
+    media_stream_constraints={"video": True, "audio": False},
+)
 
-    class SnapshotTransformer(VideoTransformerBase):
-        def __init__(self):
-            self.captured = False
-            self.frame = None
+if ctx.video_transformer and ctx.video_transformer.frame is not None:
+    if st.button("📷 Take Snapshot"):
+        ctx.video_transformer.captured = True
+        img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
 
-        def transform(self, frame):
-            # Capture only if not already captured
-            if not self.captured:
-                self.frame = frame.to_ndarray(format="bgr24")
-            # Stop video feed after capture
-            if self.captured:
-                return np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
-            return frame.to_ndarray(format="bgr24")
+        # Save to session state as bytes
+        buffer = BytesIO()
+        pil_img.save(buffer, format="PNG")
+        st.session_state["snapshot_bytes"] = buffer.getvalue()
 
-    ctx = webrtc_streamer(
-        key="snapshot",
-        video_transformer_factory=SnapshotTransformer,
-        rtc_configuration={
-            "iceServers": [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {
-                    "urls": ["turn:openrelay.metered.ca:80"],
-                    "username": "openrelayproject",
-                    "credential": "openrelayproject",
-                },
-            ]
-        },
-        media_stream_constraints={"video": True, "audio": False},
-    )
-
-    if ctx.video_transformer and ctx.video_transformer.frame is not None:
-        if st.button("📷 Take Snapshot"):
-            ctx.video_transformer.captured = True
-            img_rgb = cv2.cvtColor(ctx.video_transformer.frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(img_rgb)
-
-            # Save to session state as bytes
-            buffer = BytesIO()
-            pil_img.save(buffer, format="PNG")
-            st.session_state["snapshot_bytes"] = buffer.getvalue()
-
-            st.image(pil_img, caption="Your Snapshot", use_container_width=True)
-            st.success("✅ Snapshot captured!")
+        st.image(pil_img, caption="Your Snapshot", use_container_width=True)
+        st.success("✅ Snapshot captured!")
 
 # -----------------------------
 # AUDIO UPLOAD
@@ -142,6 +132,9 @@ if st.button("🔍 Analyze My Mood"):
                 with open(audio_path, "wb") as f:
                     f.write(uploaded_audio.getbuffer())
 
+                # ✅ Debug: confirm save
+                st.write(f"📂 Debug: Saved files to {entry_dir}")
+
                 # --- Face analysis ---
                 face_result = analyze_face(img_path)
 
@@ -156,6 +149,7 @@ if st.button("🔍 Analyze My Mood"):
                 save_entry(current_date, diary_entry, face_result, text_result, voice_result)
 
                 st.success("✅ Analysis Complete & Entry Saved!")
+                st.success(f"📂 Files saved in: `{entry_dir}`")
 
                 # Results display
                 col1, col2, col3 = st.columns(3)
@@ -171,8 +165,6 @@ if st.button("🔍 Analyze My Mood"):
                     st.markdown("### Voice Tone")
                     st.audio(audio_path)
                     st.write(f"**Detected:** {voice_result.capitalize()}")
-
-                st.success(f"📂 Files saved in: `{entry_dir}`")
 
             except Exception as e:
                 st.error(f"Error during analysis: {e}")
