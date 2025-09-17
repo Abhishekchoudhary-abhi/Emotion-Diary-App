@@ -9,6 +9,10 @@ import cv2
 import numpy as np
 from io import BytesIO
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+
+# -----------------------------
+# Google Drive Imports
+# -----------------------------
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
@@ -25,13 +29,6 @@ sys.path.append(project_root)
 from src.face_emotion import analyze_face
 from src.text_sentiment import analyze_sentiment
 from src.audio_emotion import predict_emotion as predict_voice_emotion
-
-# -----------------------------
-# GOOGLE DRIVE AUTH
-# -----------------------------
-gauth = GoogleAuth()
-gauth.LocalWebserverAuth()  # Opens browser to authenticate
-drive = GoogleDrive(gauth)
 
 # -----------------------------
 # SAVE ENTRY TO CSV
@@ -58,9 +55,7 @@ st.markdown("---")
 st.header("How are you feeling today?")
 diary_entry = st.text_area("Write down your thoughts and feelings...", height=150)
 
-# -----------------------------
-# VIDEO SNAPSHOT
-# -----------------------------
+# --- VIDEO SNAPSHOT ---
 st.header("📸 Capture your expression")
 
 class SnapshotTransformer(VideoTransformerBase):
@@ -102,9 +97,7 @@ if ctx.video_transformer and ctx.video_transformer.frame is not None:
         st.image(pil_img, caption="Your Snapshot", use_container_width=True)
         st.success("✅ Snapshot captured!")
 
-# -----------------------------
-# AUDIO UPLOAD
-# -----------------------------
+# --- AUDIO UPLOAD ---
 st.header("🎤 Upload your audio")
 uploaded_audio = st.file_uploader("Choose an audio file...", type=["wav", "mp3", "m4a"])
 if uploaded_audio:
@@ -118,40 +111,56 @@ if st.button("🔍 Analyze My Mood"):
     if diary_entry and snapshot_bytes and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             try:
+                # --- Create unique folder ---
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                
-                # --- Save snapshot locally ---
+                entry_dir = os.path.join(project_root, "data", "entries", timestamp)
+                os.makedirs(entry_dir, exist_ok=True)
+
+                # --- Save snapshot ---
                 pil_img = Image.open(BytesIO(snapshot_bytes))
-                img_path = os.path.join(project_root, f"snapshot_{timestamp}.png")
+                img_path = os.path.join(entry_dir, "snapshot.png")
                 pil_img.save(img_path)
 
-                # --- Save audio locally ---
-                audio_path = os.path.join(project_root, f"audio_{timestamp}.wav")
-                with open(audio_path, "wb") as f:
-                    f.write(uploaded_audio.getbuffer())
-
-                # --- Save text locally ---
-                text_path = os.path.join(project_root, f"text_{timestamp}.txt")
+                # --- Save text ---
+                text_path = os.path.join(entry_dir, "text.txt")
                 with open(text_path, "w", encoding="utf-8") as f:
                     f.write(diary_entry)
 
-                # --- Upload to Google Drive ---
-                g_files = []
-                for path in [img_path, audio_path, text_path]:
-                    gfile = drive.CreateFile({'title': os.path.basename(path)})
-                    gfile.SetContentFile(path)
-                    gfile.Upload()
-                    g_files.append(gfile['title'])
+                # --- Save audio ---
+                audio_path = os.path.join(entry_dir, "audio.wav")
+                with open(audio_path, "wb") as f:
+                    f.write(uploaded_audio.getbuffer())
 
-                st.success(f"✅ Files uploaded to Google Drive: {g_files}")
-
-                # --- ANALYSIS ---
+                # --- Face, Text, Audio analysis ---
                 face_result = analyze_face(img_path)
                 text_result = analyze_sentiment(diary_entry)
                 voice_result = predict_voice_emotion(audio_path)
 
+                # --- Save summary CSV ---
                 current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_entry(current_date, diary_entry, face_result, text_result, voice_result)
+
+                # --- Upload to Google Drive ---
+                gauth = GoogleAuth()
+                gauth.LocalWebserverAuth()  # Opens browser to authorize
+                drive = GoogleDrive(gauth)
+
+                # Upload snapshot
+                gfile_img = drive.CreateFile({'title': f'snapshot_{timestamp}.png'})
+                gfile_img.SetContentFile(img_path)
+                gfile_img.Upload()
+
+                # Upload text
+                gfile_txt = drive.CreateFile({'title': f'text_{timestamp}.txt'})
+                gfile_txt.SetContentFile(text_path)
+                gfile_txt.Upload()
+
+                # Upload audio
+                gfile_audio = drive.CreateFile({'title': f'audio_{timestamp}.wav'})
+                gfile_audio.SetContentFile(audio_path)
+                gfile_audio.Upload()
+
+                st.success("✅ Analysis Complete & Files Uploaded to Google Drive!")
 
                 # --- Display Results ---
                 col1, col2, col3 = st.columns(3)

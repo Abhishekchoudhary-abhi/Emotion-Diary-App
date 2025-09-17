@@ -12,3 +12,5 @@ tf-keras
 streamlit-webrtc
 av
 numpy
+pydrive2
+google-auth-oauthlib
