@@ -82,9 +82,11 @@ if st.session_state["camera_started"]:
         rtc_configuration={
             "iceServers": [
                 {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["turn:openrelay.metered.ca:80"],
-                 "username": "openrelayproject",
-                 "credential": "openrelayproject"}
+                {
+                    "urls": ["turn:openrelay.metered.ca:80"],
+                    "username": "openrelayproject",
+                    "credential": "openrelayproject",
+                },
             ]
         },
         media_stream_constraints={"video": True, "audio": False},
@@ -120,27 +122,36 @@ if st.button("🔍 Analyze My Mood"):
     if diary_entry and snapshot_bytes and uploaded_audio is not None:
         with st.spinner("Analyzing..."):
             try:
-                # --- Convert snapshot bytes to numpy array for analysis ---
+                # --- Create unique folder for this entry ---
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                entry_dir = os.path.join(project_root, "data", "entries", timestamp)
+                os.makedirs(entry_dir, exist_ok=True)
+
+                # --- Save snapshot ---
                 pil_img = Image.open(BytesIO(snapshot_bytes))
-                img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                img_path = os.path.join(entry_dir, "snapshot.png")
+                pil_img.save(img_path)
+
+                # --- Save text ---
+                text_path = os.path.join(entry_dir, "text.txt")
+                with open(text_path, "w", encoding="utf-8") as f:
+                    f.write(diary_entry)
+
+                # --- Save audio ---
+                audio_path = os.path.join(entry_dir, "audio.wav")
+                with open(audio_path, "wb") as f:
+                    f.write(uploaded_audio.getbuffer())
 
                 # --- Face analysis ---
-                temp_image_path = os.path.join(project_root, "data", "images", "temp.jpg")
-                os.makedirs(os.path.dirname(temp_image_path), exist_ok=True)
-                pil_img.save(temp_image_path)
-                face_result = analyze_face(temp_image_path)
+                face_result = analyze_face(img_path)
 
                 # --- Text analysis ---
                 text_result = analyze_sentiment(diary_entry)
 
                 # --- Audio analysis ---
-                temp_audio_path = os.path.join(project_root, "data", "audio", "temp.wav")
-                os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
-                with open(temp_audio_path, "wb") as f:
-                    f.write(uploaded_audio.getbuffer())
-                voice_result = predict_voice_emotion(temp_audio_path)
+                voice_result = predict_voice_emotion(audio_path)
 
-                # Save diary entry
+                # --- Save to central CSV (summary only) ---
                 current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_entry(current_date, diary_entry, face_result, text_result, voice_result)
 
@@ -158,8 +169,10 @@ if st.button("🔍 Analyze My Mood"):
                     st.write(f"**Detected:** {text_result.capitalize()}")
                 with col3:
                     st.markdown("### Voice Tone")
-                    st.audio(temp_audio_path)
+                    st.audio(audio_path)
                     st.write(f"**Detected:** {voice_result.capitalize()}")
+
+                st.success(f"📂 Files saved in: `{entry_dir}`")
 
             except Exception as e:
                 st.error(f"Error during analysis: {e}")
